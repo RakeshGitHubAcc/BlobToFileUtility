@@ -7,6 +7,8 @@ public interface IBlobToFileDBO {
 	public void lcaBlobToTempDir(String dbType);
 	//convert MessageBoard blob columns to folder and write files 
 	public void MsgBoardBolbToTempDir(String dbType);
+	//convert Manual loader blob columns to folder and write files 
+	public void MNLBolbToTempDir(String dbType);
 	public boolean writeBLOBToFile(InputStream ins, String destFileImage);
 	public void writeTempDirFileToSFTP(String localpath,String destFileImage);
 }

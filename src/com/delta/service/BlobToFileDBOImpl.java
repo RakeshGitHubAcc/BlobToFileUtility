@@ -12,6 +12,7 @@ import java.sql.Statement;
 import org.apache.commons.vfs2.FileSystemException;
 import org.apache.log4j.Logger;
 
+import com.delta.constant.GenericConstant;
 import com.delta.utility.DBConnectionHelper;
 import com.delta.utility.PropertyReaderHelper;
 
@@ -141,7 +142,71 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 								+ rs.getString("fileName"));
 			}
 		} catch (SQLException e) {
+			LOGGER.error("Error in BlobToFileDBOImpl: MsgBoardBolbToTempDir() due to: "
+					+ e.getMessage());
+		} finally {
+			// Cleanup resources
+			try {
+				if (rs != null)
+					rs.close();
+				if (stmt != null)
+					stmt.close();
+				if (con != null)
+					con.close();
+			} catch (SQLException e) {
 			e.printStackTrace();
+			}
+		}
+
+	}
+
+	public void MNLBolbToTempDir(String dbType) {
+		Connection con = null;
+		Statement stmt = null;
+		ResultSet rs = null;
+		// String directoryPath = "D:\\BlobDownloaded\\";
+		String local_temp = this.propertyReaderHelper
+				.getValue("sftp.local.temp.dir.mnl");
+		try {
+			StringBuilder sqlQuery = new StringBuilder();
+			sqlQuery.append(" SELECT grpSgrpDlts.CNCRR_DEPT_CD   AS DeptCode, "
+					+ " grpSgrpDlts.CNCRR_MNL_GRP_CD     AS GroupCode, "
+					+ " grpSgrpDlts.CNCRR_MNL_SGRP_CD    AS SubGroupCode, "
+					+ " mnlContentDtls.CNCRR_MNL_URL_IND AS URLStatus, "
+					+ " mnlContentDtls.CNCRR_MNL_FILE_NM AS fileName, "
+					+ " mnlContentDtls.CNCRR_MNL_OBJ     AS fileobj, "
+					+ " '/' "
+					+ " ||grpSgrpDlts.CNCRR_DEPT_CD "
+					+ " ||'/' "
+					+ " ||grpSgrpDlts.CNCRR_MNL_GRP_CD "
+					+ " ||'/' "
+					+ " ||grpSgrpDlts.CNCRR_MNL_SGRP_CD "
+					+ " ||'/' AS ManualFolderURL "
+					+ " FROM EEW.CNCRR_MNL_GRP_SGRP_DEPT grpSgrpDlts "
+					+ " LEFT JOIN EEW.CNCRR_MNL_CTNT mnlContentDtls "
+					+ " ON (grpSgrpDlts.CNCRR_DEPT_CD = mnlContentDtls.CNCRR_DEPT_CD "
+					+ " AND grpSgrpDlts.CNCRR_MNL_GRP_CD = mnlContentDtls.CNCRR_MNL_GRP_CD "
+					+ " AND grpSgrpDlts.CNCRR_MNL_SGRP_CD = mnlContentDtls.CNCRR_MNL_SGRP_CD) "
+					+ " WHERE rownum<= 10 " + " ORDER BY DeptCode,"
+					+ " GroupCode, " + " SubGroupCode, " + " URLStatus ");
+			con = this.dbConnectionHelper.getConnection();
+			stmt = con.createStatement();
+			rs = stmt.executeQuery(sqlQuery.toString());
+			while (rs.next()) {
+				if(GenericConstant.NO_INDICATOR.equals(rs.getString("URLStatus"))){
+					// write manual loader file
+					writeBLOBToFile(
+							rs.getBinaryStream("fileobj"),
+							local_temp + rs.getString("ManualFolderURL")
+									+ rs.getString("fileName"));	
+				}else{
+					//create folder
+					createDir(local_temp + rs.getString("ManualFolderURL"));
+				}
+			}
+		} catch (SQLException e) {
+			LOGGER.error("Error in BlobToFileDBOImpl: MNLBolbToTempDir() due to: "
+					+ e.getMessage());
 		} finally {
 			// Cleanup resources
 			try {
@@ -158,6 +223,18 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 
 	}
 
+	public boolean createDir(String destFileImage) {
+		boolean flag = false;
+		File fileImage = new File(destFileImage);
+		// if directory doesn't exists create
+		if (!fileImage.exists()) {
+			// to create directories
+			flag=fileImage.mkdirs();
+			LOGGER.info("Directory created with name : "
+					+ fileImage.getName());
+		}
+		return flag;
+	}
 	public boolean writeBLOBToFile(InputStream ins, String destFileImage) {
 		boolean flag = false;
 		FileOutputStream fos = null;
@@ -182,8 +259,7 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 					}
 					flag = true;
 				} else {
-					LOGGER.info("File already exists : "
-							+ fileImage.getName());
+					LOGGER.info("File already exists : " + fileImage.getName());
 					flag = false;
 				}
 			}
@@ -236,7 +312,6 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 					LOGGER.error("FileSystemException in BlobToFileDBOImpl: listDirectory() due to : "
 							+ e.getMessage());
 				}
-
 			}
 		}
 	}

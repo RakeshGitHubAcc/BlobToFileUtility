@@ -1,6 +1,8 @@
 package com.delta.service;
 
 import java.io.File;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
@@ -48,13 +50,15 @@ public class SftpDBOImpl implements ISftpDBO {
 		boolean flag = false;
 		SftpHelper sftpHelper = SftpHelper.getInstanceSftpHelper();
 		StandardFileSystemManager manager = sftpHelper.getManager();
+		FileObject localFileObj=null;
+		FileObject remoteFile=null;
 		try {
 			manager.init();
 			// Create local file object
-			FileObject localFileObj = manager.resolveFile(localFile
+			localFileObj= manager.resolveFile(localFile
 					.getAbsolutePath());
 			// Create remote file object
-			FileObject remoteFile = manager.resolveFile(
+			remoteFile= manager.resolveFile(
 					createConnectionString(sftpHelper.getSFTP_SERVER_ADDRESS(),
 							sftpHelper.getSFTP_USERNAME(),
 							sftpHelper.getSFTP_PASSWORD(), remote_home_dir_path
@@ -72,10 +76,17 @@ public class SftpDBOImpl implements ISftpDBO {
 						+ remoteFile.getName().getBaseName()+" already exists");
 			}
 		} catch (FileSystemException fse) {
-			LOGGER.error("File Uploading failed due to : " + fse.getMessage());
+			LOGGER.error("File Uploading failed in upload() due to : " + fse.getMessage()+" cause: "+fse.getCause());
 			throw fse;
 		} finally {
+			if(null!=localFileObj){
+				localFileObj.close();	
+			}
+			if(null!=remoteFile){
+				remoteFile.close();	
+			}
 			if (null != manager) {
+				//manager.freeUnusedResources();
 				manager.close();
 			}
 		}
@@ -84,8 +95,18 @@ public class SftpDBOImpl implements ISftpDBO {
 
 	public String createConnectionString(String hostName, String username,
 			String password, String remoteFilePath) {
-		return "sftp://" + username + ":" + password + "@" + hostName + "/"
-				+ remoteFilePath;
+		 	String userInfo = username + ":" + password;
+		 	String retString=null;
+			try {
+				URI uri = new URI("sftp", userInfo, hostName, -1,
+						remoteFilePath, null, null);
+				retString=uri.toString();
+			} catch (URISyntaxException e) {
+				LOGGER.info("Could not create connection string due to : "+e.getMessage());	
+			}
+	        return retString;
+		/*return "sftp://" + username + ":" + password + "@" + hostName + "/"
+				+ remoteFilePath;*/
 	}
 
 	public boolean exist(File localFile, String remoteFilePath) {
@@ -113,10 +134,11 @@ public class SftpDBOImpl implements ISftpDBO {
 		boolean flag = false;
 		SftpHelper sftpHelper = SftpHelper.getInstanceSftpHelper();
 		StandardFileSystemManager manager = sftpHelper.getManager();
+		FileObject remoteFile=null;
 		try {
 			manager.init();
 			// Create remote file object
-			FileObject remoteFile = manager.resolveFile(
+			remoteFile= manager.resolveFile(
 					createConnectionString(sftpHelper.getSFTP_SERVER_ADDRESS(),
 							sftpHelper.getSFTP_USERNAME(),
 							sftpHelper.getSFTP_PASSWORD(), remoteDirPath),
@@ -132,12 +154,14 @@ public class SftpDBOImpl implements ISftpDBO {
 						+ " ] already exists");
 			}
 		} catch (FileSystemException fse) {
-			System.out.println("File Uploading failed due to : "
-					+ fse.getMessage());
-			LOGGER.error("File Uploading failed due to : " + fse.getMessage());
+			LOGGER.error("File Uploading failed due to : " + fse.getMessage() +" cause: "+fse.getCause());
 			throw fse;
 		} finally {
+			if(null!=remoteFile){
+				remoteFile.close();
+			}
 			if (null != manager) {
+				//manager.freeUnusedResources();
 				manager.close();
 			}
 		}
