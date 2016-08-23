@@ -128,8 +128,10 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 			sqlQuery.append("select CNCRR_MSG_ID as formId,"
 					+ "CNCRR_MSG_ATMT_IMG_OBJ as attachFile,"
 					+ "CNCRR_MSG_ATMT_FILE_NM as fileName,"
-					+ "'/'||CNCRR_MSG_ID||'/' as msgBrdDirUrl"
-					+ " from cncrr_msg_brd_atmt " + " where rownum<=10"
+					+ "'/'||CNCRR_MSG_ID||'/' as msgBrdDirUrl, "
+					+ " CNCRR_MSG_ATMT_ID as attachId"
+					+ " from cncrr_msg_brd_atmt " 
+					+ " where rownum<=10"
 					+ " order by CNCRR_MSG_ID ");
 			con = this.dbConnectionHelper.getConnection();
 			stmt = con.createStatement();
@@ -139,6 +141,8 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 				writeBLOBToFile(
 						rs.getBinaryStream("attachFile"),
 						local_temp + rs.getString("msgBrdDirUrl")
+								+ rs.getString("attachId")
+								+ GenericConstant.UNDERSCORE
 								+ rs.getString("fileName"));
 			}
 		} catch (SQLException e) {
@@ -193,7 +197,8 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 			stmt = con.createStatement();
 			rs = stmt.executeQuery(sqlQuery.toString());
 			while (rs.next()) {
-				if(GenericConstant.NO_INDICATOR.equals(rs.getString("URLStatus"))){
+				if (GenericConstant.NO_INDICATOR.equals(rs
+						.getString("URLStatus"))) {
 					// write manual loader file
 					writeBLOBToFile(
 							rs.getBinaryStream("fileobj"),
@@ -223,6 +228,55 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 
 	}
 
+	public void MemoToTempDir(String dbType) {
+		Connection con = null;
+		Statement stmt = null;
+		ResultSet rs = null;
+		String local_temp = this.propertyReaderHelper
+				.getValue("sftp.local.temp.dir.memo");
+		try {
+			StringBuilder sqlQuery = new StringBuilder();
+			sqlQuery.append(" SELECT CNCRR_MEMO_ID  AS MemoId, "
+					+ " CNCRR_MEMO_FILE_OBJ AS attachFile, "
+					+ " CNCRR_MEMO_FILE_NM  AS fileName, " 
+					+ " '/' "
+					+ " ||CNCRR_MEMO_ID "
+					+ " ||'/' AS memoDirUrl, "
+					+ " CNCRR_MEMO_ATMT_ID AS attachId "
+					+ " FROM CNCRR_MEMO_ATMT " 
+					+ " WHERE rownum<=10 "
+					+ " ORDER BY CNCRR_MEMO_ID");
+			con = this.dbConnectionHelper.getConnection();
+			stmt = con.createStatement();
+			rs = stmt.executeQuery(sqlQuery.toString());
+			while (rs.next()) {
+				// write Attachment file
+				writeBLOBToFile(
+						rs.getBinaryStream("attachFile"),
+						local_temp + rs.getString("memoDirUrl")
+								+ rs.getString("attachId")
+								+ GenericConstant.UNDERSCORE
+								+ rs.getString("fileName"));
+			}
+		} catch (SQLException e) {
+			LOGGER.error("Error in BlobToFileDBOImpl: MemoToTempDir() due to: "
+					+ e.getMessage());
+		} finally {
+			// Cleanup resources
+			try {
+				if (rs != null)
+					rs.close();
+				if (stmt != null)
+					stmt.close();
+				if (con != null)
+					con.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+
+	}
+
 	public boolean createDir(String destFileImage) {
 		boolean flag = false;
 		File fileImage = new File(destFileImage);
@@ -230,8 +284,7 @@ public class BlobToFileDBOImpl implements IBlobToFileDBO {
 		if (!fileImage.exists()) {
 			// to create directories
 			flag=fileImage.mkdirs();
-			LOGGER.info("Directory created with name : "
-					+ fileImage.getName());
+			LOGGER.info("Directory created with name : " + fileImage.getName());
 		}
 		return flag;
 	}
